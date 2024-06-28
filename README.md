@@ -1,4 +1,4 @@
-This is the codebase for the paper [Fundamental Problems With Model Editing: How Should Rational Belief Revision Work in LLMs?]().
+This is the codebase for the paper [Fundamental Problems With Model Editing: How Should Rational Belief Revision Work in LLMs?](https://arxiv.org/pdf/2406.19354)
 
 #### Install Requirements
 
