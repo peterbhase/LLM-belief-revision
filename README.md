@@ -23,7 +23,7 @@ scripts/download_wikidata.sh $DATA_DIR
 Note that you must supply the `--model_dir`, `--data_dir`, and `--cache_dir` args for saving/storing models by setting the respective environment variables.
 
 ```
-python main.py --num_atomic_facts 10000 \ 
+python main.py --num_atomic_facts 10000 \
     --num_relations 10 \
     --n_base_fact_samples 10 \
     -mgtp .6 \
@@ -52,7 +52,7 @@ python main.py --num_atomic_facts 10000 \
 #### Fit a model to 100k facts, with logically complex sentences, with model editing evaluation. This is the experiment setting in the paper.
 
 ```
-python main.py --num_atomic_facts 100000 \ 
+python main.py --num_atomic_facts 100000 \
     --num_relations 10 \
     --eval_size 5000 \
     --n_base_fact_samples 10 \
