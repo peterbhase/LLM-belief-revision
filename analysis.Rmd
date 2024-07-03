@@ -1,0 +1,883 @@
+---
+title: "analysis"
+output: pdf_document
+date: ""
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(tools)
+library(gridExtra)
+library(grid)
+library(lemon)
+library(reshape2)
+library(extrafont)
+loadfonts()
+```
+
+# Analysis of all datasets (final plots)
+
+```{r load all datasets}
+
+data <- read_csv('outputs/editing_stats_mistral-83m_clm_100000-facts_10-rels_tb-1.0e+09_bs-128_mgtp-0.6_s-10_b-10_c-20_TF-a-o-n_ho-5_he-0_sd0.csv') 
+colnames(data)[1:30]
+```
+
+```{r theme}
+
+theme = theme(
+        axis.ticks = element_blank(),
+        axis.text = element_text(size=10, color='black'),
+        axis.line.x = element_line(colour = 'black', size = .3),
+        axis.line.y = element_line(colour = 'black', size = .3),
+        panel.background = element_blank(),
+        panel.border = element_blank(),
+        panel.grid = element_line(colour = '#DFDFDF', size = .2),
+        text = element_text(size=9, family="serif"),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust=0.5),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=9),
+        legend.key = element_rect(fill = "white"),
+        legend.box.background = element_blank(),
+        legend.position = "right",
+        panel.spacing=unit(1.5,"lines"),
+        strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face="bold", size=10),
+        strip.text.y = element_text(angle=0, face="bold", size=10, hjust=0),
+        )
+
+cbp1 <- c("#363636", "#009E73", "#0072B2", "#D55E00", "#CC79A7","#56B4E9" )
+
+cbp2 = c("#0072B2", "#D55E00")
+
+```
+
+```{r functions}
+
+str_clean <- function(x){
+  x <- gsub("\\.", "", trimws(tolower(x)))
+  x <- gsub("\\(|\\)", "", x)
+  return(x)
+}
+
+get_acc <- function(pred, target){
+  pred <- str_clean(pred)
+  target <- str_clean(target)
+  # print(target)
+  # print(pred)
+  return(grepl(target, pred))
+}
+
+```
+
+
+
+```{r make intermediate dataframes + postprocessing}
+
+# add columns
+data <- data %>%
+  mutate(
+         # same_s_same_r_target_mismatch = same_s_same_r_new_modal_obj != requested_obj,
+         diff_s_same_r_changes = diff_s_same_r_new_modal_obj != diff_s_same_r_obj,
+         same_s_diff_r_changes = same_s_diff_r_new_modal_obj != same_s_diff_r_obj,
+         diff_s_diff_r_changes = diff_s_diff_r_new_modal_obj != diff_s_diff_r_obj,
+         )
+
+# fill out the marginalized_prop_targets
+data <- data %>%
+  mutate(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+           `editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_same_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+           `editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_same_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_same_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_same_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_diff_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_diff_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_diff_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+         `editing_diff_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`), `editing_diff_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, `editing_diff_s_diff_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`),
+           `editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_same_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_same_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`), `editing_same_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`),
+         `editing_diff_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized` = ifelse(is.na(`editing_diff_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`), `editing_diff_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_diff_s_diff_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized`),
+         )
+# set prob coherence targets
+data <- data %>% 
+  mutate(
+         # same_s_same_r_prob_target = `editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`,
+         same_s_same_r_prob_target = `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`,
+         same_s_diff_r_prob_target = `editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`,
+         diff_s_same_r_prob_target = `editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`,
+         diff_s_diff_r_prob_target = `editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`,
+  )
+# add in coherence metrics
+data <- data %>%
+  mutate(same_s_same_r_coherence_new_modal_obj = abs(editing_same_s_same_r_fact_new_modal_obj_prob - same_s_same_r_prob_target),
+         same_s_diff_r_coherence_new_modal_obj = abs(editing_same_s_diff_r_fact_new_modal_obj_prob - same_s_diff_r_prob_target),
+         diff_s_same_r_coherence_new_modal_obj = abs(editing_diff_s_same_r_fact_new_modal_obj_prob - diff_s_same_r_prob_target),
+         diff_s_diff_r_coherence_new_modal_obj = abs(editing_diff_s_diff_r_fact_new_modal_obj_prob - diff_s_diff_r_prob_target),
+         same_s_same_r_coherence_requested_obj = abs(editing_same_s_same_r_fact_requested_obj_prob - same_s_same_r_prob_target),
+         same_s_diff_r_coherence_requested_obj = abs(editing_same_s_diff_r_fact_requested_obj_prob - same_s_diff_r_prob_target),
+         diff_s_same_r_coherence_requested_obj = abs(editing_diff_s_same_r_fact_requested_obj_prob - diff_s_same_r_prob_target),
+         diff_s_diff_r_coherence_requested_obj = abs(editing_diff_s_diff_r_fact_requested_obj_prob - diff_s_diff_r_prob_target),
+         same_s_same_r_coherence_orig_GT_obj = abs(editing_same_s_same_r_fact_orig_GT_obj_prob - `editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         same_s_diff_r_coherence_orig_GT_obj = abs(editing_same_s_diff_r_fact_orig_GT_obj_prob - `editing_same_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         diff_s_same_r_coherence_orig_GT_obj = abs(editing_diff_s_same_r_fact_orig_GT_obj_prob - `editing_diff_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         diff_s_diff_r_coherence_orig_GT_obj = abs(editing_diff_s_diff_r_fact_orig_GT_obj_prob - `editing_diff_s_diff_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized`),
+         )
+
+# set some other columns
+data <- data %>%
+  mutate(prob_delta = 
+           `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r` - `editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`)
+
+# get stats before editing
+step_0_results <- data %>% 
+  filter(step == 0) %>%
+  mutate(model_originally_correct = editing_same_s_same_r_fact_orig_GT_obj_acc,
+         R_correctness = mapply(get_acc, o_given_s_r_output, e2),
+         new_request = !mapply(get_acc, o_given_s_r_output, requested_obj),
+         )
+# add per data point results
+data <- data %>%
+  left_join(step_0_results %>% select(id, model_originally_correct, R_correctness, new_request))
+
+# make more subsets
+data_updates <- data %>% 
+  filter(new_request == TRUE,
+         last_step == TRUE)
+data_updates_step_0 <- data %>% 
+  filter(new_request == TRUE,
+         step == 0) 
+data_reinforcing <- data%>%
+  filter(!new_request,
+         last_step)
+data_reinforcing_step_0 <- data%>%
+  filter(!new_request,
+         step == 0)
+
+# all updates, including non-cf edits
+data_all_last_step = data %>% 
+  filter(last_step)
+data_all_step_0 = data %>% 
+  filter(step==0)
+
+```
+
+```{r descriptive results}
+
+sprintf("This many points have downstream dependencies: %.2f", mean(step_0_results$diff_r_is_dependent_rel))
+
+# check our accuracy computation
+table(step_0_results$model_originally_correct, step_0_results$R_correctness)
+
+# pretrained model performance
+step_0_results %>% 
+  summarise(n=n(),
+            eval_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            prob_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+
+# descriptive statistics of kinds of edit cases
+step_0_results %>% 
+  # group_by(new_request, model_originally_correct, new_fact_reinforces) %>%
+  group_by(model_originally_correct, new_fact_reinforces) %>%
+  summarise(
+      n = n(),
+      # new_fact_reinforces = mean(new_fact_reinforces),
+      # eval_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+      has_relevant_property = mean(has_relevant_property),
+      same_r_is_dependent_rel = mean(same_r_is_dependent_rel),
+      diff_r_is_dependent_rel = mean(diff_r_is_dependent_rel),
+      all_cases_independent = mean(all_cases_independent),
+      using_diff_s_with_both_r_s = mean(using_diff_s_with_both_r_s),
+      diff_s_same_r_changes = mean(diff_s_same_r_changes),
+      same_s_diff_r_changes = mean(same_s_diff_r_changes),
+      diff_s_diff_r_changes = mean(diff_s_diff_r_changes),
+  )
+
+# let's look at distribution of post update probs minus pre update probs
+data_all_last_step %>% 
+  ggplot(aes(prob_delta)) +
+    geom_histogram(fill = "#56B4E9", color = "black", bins=20) + 
+    ggtitle("post update probs vs pre update probs for s r o")
+    theme
+  
+```
+
+```{r all data results (matches python output)}
+
+data_all_last_step %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_new_modal_obj_acc),
+            same_s_same_r_acc_modal = mean(editing_same_s_same_r_fact_new_modal_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            )
+
+```
+
+
+```{r look at some examples, include=FALSE}
+show_all=FALSE
+if (show_all){
+# take a look at the requests, and the original model preds
+View(step_0_results %>% mutate(editing_same_s_same_r_fact_requested_obj_prob = round(editing_same_s_same_r_fact_requested_obj_prob, 3)) %>% select(id, e1, rel, e2, requested_obj, o_given_s_r_output, model_originally_correct, R_correctness, new_fact_reinforces, new_request, editing_same_s_same_r_fact_requested_obj_prob))
+
+# check pretrained model coherence for facts
+View(data_updates %>% 
+       select(id, e1, rel, e2, o_given_s_r_output, same_s_same_r_obj, editing_same_s_same_r_fact_orig_GT_obj_acc, editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_posterior_prob_marginalized, editing_same_s_same_r_fact_orig_GT_obj_prob, same_s_same_r_coherence_orig_GT_obj, editing_same_s_same_r_fact_orig_GT_obj_pre_update_probs_generative_prob) %>%
+       mutate(across(where(is.numeric), round, 6)),
+)
+
+# CHECK COHERENCE SCORES for requested obj afte
+View(data_updates %>% 
+              select(id, e1, rel, e2, o_given_s_r_output, requested_obj, editing_same_s_same_r_fact_requested_obj_acc, `editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_o_given_s_r`, `editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_o_given_s_r`, prob_delta,
+                     editing_same_s_same_r_fact_requested_obj_prob, same_s_same_r_coherence_requested_obj) %>%
+       mutate(across(where(is.numeric), round, 3)),
+)
+
+
+# take a look at generalization cases
+View(step_0_results %>% 
+       # filter(!new_request) %>%
+       filter(same_s_diff_r_changes) %>%
+       select(id, e1, rel, e2, o_given_s_r_output, model_originally_correct, new_request, requested_obj, 
+                                same_s_diff_r_subj, same_s_diff_r_rel, same_s_diff_r_obj, same_s_diff_r_new_modal_obj, same_s_diff_r_changes, 
+                                diff_s_same_r_subj, diff_s_same_r_rel, diff_s_same_r_obj, diff_s_same_r_new_modal_obj, diff_s_same_r_changes, 
+                                diff_s_diff_r_subj, diff_s_diff_r_rel, diff_s_diff_r_obj, diff_s_diff_r_new_modal_obj, diff_s_diff_r_changes))
+
+# look at all trajectories
+View(data %>% filter(new_request) %>% mutate(across(where(is.numeric), round, 4)) %>% select(id, e1, rel, e2, requested_obj, o_given_s_r_output, step, editing_same_s_same_r_fact_requested_obj_prob,editing_same_s_same_r_fact_requested_obj_acc, model_originally_correct, R_correctness, new_fact_reinforces, new_request))
+}
+
+```
+
+
+```{r TABLE: all output-changing edits results}
+
+# View(data_updates %>% filter(!model_originally_correct))
+
+sprintf("# points: %d", nrow(step_0_results))
+sprintf("# points with update requests: %d", nrow(data_updates_step_0))
+
+data_updates_step_0 %>%
+  summarize(n = n(),
+            orig_correct = mean(editing_same_s_same_r_fact_orig_GT_obj_acc, na.rm=TRUE),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            GT_prob = mean(editing_same_s_same_r_fact_orig_GT_obj_prob),
+            )
+
+data_updates_step_0 %>% 
+  group_by(model_originally_correct) %>%
+  summarize(n = n(),
+            orig_correct = mean(editing_same_s_same_r_fact_orig_GT_obj_acc, na.rm=TRUE),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            GT_prob = mean(editing_same_s_same_r_fact_orig_GT_obj_prob),
+            )
+
+# pre-edit table
+(pre_edit_table <- data_updates_step_0 %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_orig_GT_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_orig_GT_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_orig_GT_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_orig_GT_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_orig_GT_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_orig_GT_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+# model editing table
+(post_edit_table <- 
+data_updates %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_requested_obj_acc),
+            same_s_same_r_acc_modal = mean(editing_same_s_same_r_fact_new_modal_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+all_table <- rbind(pre_edit_table, post_edit_table %>% select(-same_s_same_r_acc_modal))
+all_table$condition = c("pre-edit", "post-edit")
+all_table <- all_table %>%
+  mutate(
+    mutate(across(where(is.numeric), round, 4)),
+  ) %>% 
+  select(condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction)
+all_table %>%
+  write_csv('results/table_counterfactual_editing_results.csv')
+all_table
+table_1 <- all_table
+table_1$data_type = 'updating'
+table_1$group = 'updating'
+
+```
+
+```{r do updates generalize?}
+
+(generalization_table <- 
+data_updates %>%
+  group_by(same_s_diff_r_changes) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_new_modal_obj_acc),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_new_modal_obj),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+generalization_table %>%
+  write_csv('results/edit_generalization.csv')
+   # %>% select(contains("acc"))
+
+
+```
+
+
+```{r TABLE: downstream answer changes}
+
+# filter_var=no table
+pre_edit_table <- data_all_step_0 %>%
+  filter(!same_s_diff_r_changes) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_orig_GT_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_orig_GT_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_orig_GT_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_orig_GT_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_orig_GT_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_orig_GT_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+post_edit_table <- data_all_last_step %>%
+  filter(!same_s_diff_r_changes) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_requested_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+filter_neg_table <- rbind(pre_edit_table, post_edit_table)
+filter_neg_table$condition = c("pre-edit", "post-edit")
+filter_neg_table <- filter_neg_table %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction)
+
+# filter_var=yes table
+(pre_edit_table <- data_all_step_0 %>%
+  filter(same_s_diff_r_changes) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_orig_GT_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_orig_GT_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_orig_GT_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_orig_GT_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_orig_GT_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_orig_GT_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+(post_edit_table <- data_all_last_step %>%
+  filter(same_s_diff_r_changes) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_requested_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+filter_var_table <- rbind(pre_edit_table, post_edit_table)
+filter_var_table$condition = c("pre-edit", "post-edit")
+filter_var_table <- filter_var_table %>%
+  mutate(across(where(is.numeric), round, 4)) %>% 
+  select(condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction)
+
+# combine all
+all_table <- rbind(filter_neg_table, filter_var_table)
+all_table$data_type = c("No Downstream Implications", "No Downstream Implications", "Has Downstream Implications", "Has Downstream Implications")
+all_table %>%
+  write_csv(sprintf('results/table_all_editing_downstream_implications_results.csv'))
+print(all_table)
+
+table_2 <- all_table[3:4,]
+table_2$group = 'implications'
+
+```
+
+```{r TABLE: fixing errors}
+
+# pre-edit table
+(pre_edit_table <- data_updates_step_0 %>%
+  filter(model_originally_correct, !new_fact_reinforces) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_orig_GT_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_orig_GT_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_orig_GT_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_orig_GT_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_orig_GT_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_orig_GT_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+# model editing table
+(post_edit_table <- 
+data_updates %>%
+  filter(model_originally_correct, !new_fact_reinforces) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_requested_obj_acc),
+            same_s_same_r_acc_modal = mean(editing_same_s_same_r_fact_new_modal_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+no_implications_table <- rbind(pre_edit_table, post_edit_table %>% select(-same_s_same_r_acc_modal))
+no_implications_table$condition = c("pre-edit", "post-edit")
+no_implications_table <- no_implications_table %>%
+  mutate(
+    mutate(across(where(is.numeric), round, 4)),
+  )  %>% 
+  select(condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction)
+no_implications_table %>%
+  write_csv('results/breaking_updates_results.csv')
+
+# pre-edit table
+(pre_edit_table <- data_updates_step_0 %>%
+  filter(!model_originally_correct, new_fact_reinforces) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_orig_GT_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_orig_GT_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_orig_GT_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_orig_GT_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_orig_GT_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_orig_GT_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_orig_GT_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_orig_GT_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+# model editing table
+(post_edit_table <- 
+data_updates %>%
+  filter(!model_originally_correct, new_fact_reinforces) %>%
+  summarize(n = n(),
+            req_prob = mean(editing_same_s_same_r_fact_requested_obj_prob),
+            same_s_same_r_coherence = mean(same_s_same_r_coherence_requested_obj),
+            same_s_same_r_acc = mean(editing_same_s_same_r_fact_requested_obj_acc),
+            same_s_diff_r_coherence = mean(same_s_diff_r_coherence_new_modal_obj),
+            same_s_diff_r_acc = mean(editing_same_s_diff_r_fact_new_modal_obj_acc),
+            diff_s_same_r_coherence = mean(diff_s_same_r_coherence_new_modal_obj),
+            diff_s_same_r_acc = mean(editing_diff_s_same_r_fact_new_modal_obj_acc),
+            diff_s_diff_r_coherence = mean(diff_s_diff_r_coherence_new_modal_obj),
+            diff_s_diff_r_acc = mean(editing_diff_s_diff_r_fact_new_modal_obj_acc),
+            commutation = mean(commutation),
+            multiplication = mean(multiplication),
+            disjunction = mean(disjunction),
+            TF_coherence = mean(TF_coherence),
+            negation = mean(negation),
+            )
+)
+
+implications_table <- rbind(pre_edit_table, post_edit_table)
+implications_table$condition = c("pre-edit", "post-edit")
+implications_table <- implications_table %>%
+  mutate(
+    mutate(across(where(is.numeric), round, 4)),
+  )  %>% 
+  select(condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction)
+implications_table %>%
+  write_csv('results/fixing_updates_results.csv')
+
+# combine all
+all_table <- rbind(no_implications_table, implications_table)
+all_table$data_type = c("Breaking", "Breaking", "Fixing", "Fixing")
+all_table %>%
+  write_csv('results/table_breaking_vs_fixing_results.csv')
+all_table
+
+table_3 <- all_table[3:4,]
+table_3$group = 'fixing'
+
+```
+
+```{r RESULTS TABLE}
+
+results_table <- rbind(table_1, table_2, table_3)
+results_table <- results_table %>% 
+  select(group, condition, n, req_prob, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction) %>%
+  mutate(across(where(is.numeric), round, 2))
+# results_table %>% 
+  
+# get diffs
+cols <- c("req_prob", "n", "same_s_same_r_acc", "same_s_diff_r_acc", "diff_s_same_r_acc", "diff_s_diff_r_acc", "same_s_same_r_coherence", "same_s_diff_r_coherence", "diff_s_same_r_coherence", "diff_s_diff_r_coherence", "TF_coherence", "negation", "multiplication", "disjunction")
+diff_df <- data.frame(matrix(nrow = 3, ncol = length(cols)))
+colnames(diff_df) <- cols 
+for (i in seq(1, nrow(results_table), by = 2)) {
+  row_index <- (i + 1) / 2
+  diff_df[row_index, ] <- results_table[i + 1, cols] - results_table[i, cols]
+}
+diff_df$condition = 'delta'
+diff_df$group = c("updating", "implications", "fixing")
+diff_df <- diff_df %>%
+  select(group, condition, req_prob, n, same_s_same_r_acc, same_s_diff_r_acc, diff_s_same_r_acc, diff_s_diff_r_acc, same_s_same_r_coherence, same_s_diff_r_coherence, diff_s_same_r_coherence, diff_s_diff_r_coherence, TF_coherence, negation, multiplication, disjunction) %>%
+  mutate(across(where(is.numeric), round, 2))
+
+# View the resulting difference dataframe
+new_df <- rbind(
+  results_table[1:2,],
+  diff_df[1,],
+  results_table[3:4,],
+  diff_df[2,],
+  results_table[5:6,],
+  diff_df[3,]
+)
+print(new_df)
+new_df %>%
+  select(-c(n, group, req_prob)) %>%
+  write_csv('results/main_table.csv')
+
+```
+
+
+
+```{r plotting prep}
+
+sentence_sep = "\n"
+data <- data %>%
+  mutate(request_str = paste(e1, rel, e2, " → ", requested_obj),
+         same_s_same_r_sentence = paste(e1, rel, e2, sep=sentence_sep),
+         same_s_diff_r_sentence = paste(e1, same_s_diff_r_rel, same_s_diff_r_obj, sep=sentence_sep),
+         diff_s_same_r_sentence = paste(diff_s_same_r_subj, diff_s_same_r_rel, diff_s_same_r_obj, sep=sentence_sep),
+         diff_s_diff_r_sentence = paste(diff_s_diff_r_subj, diff_s_diff_r_rel, diff_s_diff_r_obj, sep=sentence_sep),
+         same_s_same_r_sentence_new_modal_obj = paste(e1, rel, editing_same_s_same_r_fact_new_modal_obj_output, sep=sentence_sep),
+         same_s_diff_r_sentence_new_modal_obj = paste(e1, same_s_diff_r_rel, same_s_diff_r_new_modal_obj, sep=sentence_sep),
+         diff_s_same_r_sentence_new_modal_obj = paste(diff_s_same_r_subj, diff_s_same_r_rel, diff_s_same_r_new_modal_obj, sep=sentence_sep),
+         diff_s_diff_r_sentence_new_modal_obj = paste(diff_s_diff_r_subj, diff_s_diff_r_rel, diff_s_diff_r_new_modal_obj, sep=sentence_sep),
+         same_s_same_r_sentence_requested_obj = paste(e1, rel, editing_same_s_same_r_fact_requested_obj_output, sep=sentence_sep),
+  )
+
+plot_probs <- function(point_data, probs_name, pre_update_prob, post_update_prob, title){
+  plot <- point_data %>% 
+    ggplot(aes_string(x="step", y=probs_name)) +
+    geom_line(linewidth=.75) + 
+    ylim(c(0,1)) + 
+    geom_hline(yintercept = pre_update_prob, linetype = "dashed", color = "#D63C17", linewidth=.8) +
+    geom_hline(yintercept = post_update_prob, linetype = "dashed", color = "#516EE9", linewidth=.8) +
+    labs(y="P(target)", x="Update Step", title=title) + 
+    theme + 
+    theme(plot.title = element_text(size=15),
+          axis.text = element_text(size=12, color='black'),
+          axis.title.x = element_text(size = 14),
+          axis.title.y = element_text(size = 14))
+}
+
+```
+
+
+
+```{r plot example trajectories}
+
+data_ids <- data %>%
+  mutate(implication_size = `editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized` - editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized,
+         sentence_str = paste(e1, rel, e2),
+         ) %>%
+  filter(same_s_diff_r_changes,
+         nchar(sentence_str) < 40,
+         prob_delta > .2, # this is for the original update
+         implication_size > .2, # this is for the change to the downstream fact
+         # !model_originally_correct, new_fact_reinforces,
+         rel == 'educated at',
+         ) %>%
+  pull(id) %>%
+  unique()
+sprintf("Have %s points with desired parameters", length(data_ids))
+  
+maxlen = min(20, length(data_ids))
+data_ids <- data_ids[1:maxlen]
+data_ids <- c("268", "844", "2885")
+
+# data_ids <- 0:1
+
+for (DATA_ID in data_ids){
+  point_data <- data %>% filter(id==DATA_ID)
+  all_plots <- list()
+  
+  request_str <- (point_data %>% pull(request_str))[1]
+  print(request_str)
+  
+  # same s same r
+  sentence_str <- (point_data %>% pull(same_s_same_r_sentence_requested_obj))[40]
+  sentence_str = paste("Probabilistic Coherence | same s | same r", "\n", sentence_str, sep="")
+  pre_update_prob <- (point_data %>% pull(editing_same_s_same_r_fact_requested_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- (point_data %>% pull(`editing_same_s_same_r_fact_requested_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'editing_same_s_same_r_fact_requested_obj_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[1]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_same_s_same_r.pdf", DATA_ID),width = 5.4, height = 3.6, units = "in")
+  
+  # same s diff r
+  orig_obj <- (point_data %>% pull(same_s_diff_r_obj))[1]
+  print(orig_obj)
+  sentence_str <- (point_data %>% pull(same_s_diff_r_sentence_new_modal_obj))[1]
+  sentence_str = paste("Probabilistic Coherence | same s | diff r", "\n", sentence_str, sep="")
+  pre_update_prob <- (point_data %>% pull(editing_same_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- (point_data %>% pull(`editing_same_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'editing_same_s_diff_r_fact_new_modal_obj_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[2]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_same_s_diff_r.pdf", DATA_ID),width = 5.4, height = 3.6, units = "in")
+  
+  # diff s same r
+  sentence_str <- (point_data %>% pull(diff_s_same_r_sentence_new_modal_obj))[1]
+  sentence_str = paste("Probabilistic Coherence | diff s | same r", "\n", sentence_str, sep="")
+  pre_update_prob <- (point_data %>% pull(editing_diff_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- (point_data %>% pull(`editing_diff_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'editing_diff_s_same_r_fact_new_modal_obj_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[3]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_diff_s_same_r.pdf", DATA_ID),width = 5.4, height = 3.6, units = "in")
+  
+  # diff s diff r
+  sentence_str <- (point_data %>% pull(diff_s_diff_r_sentence_new_modal_obj))[1]
+  sentence_str = paste("Probabilistic Coherence | diff s | diff r", "\n", sentence_str, sep="")
+  pre_update_prob <- (point_data %>% pull(editing_diff_s_diff_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- (point_data %>% pull(`editing_diff_s_diff_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'editing_diff_s_diff_r_fact_new_modal_obj_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[4]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_diff_s_diff_r.pdf", DATA_ID), width = 5.4, height = 3.6, units = "in")
+  
+  # TF coherence
+  sentence_str <- (point_data %>% pull(same_s_same_r_sentence_new_modal_obj))[1]
+  sentence_str <- sprintf("'%s' is true", sentence_str)
+  sentence_str = paste("Logical Coherence | True/False", "\n", sentence_str, sep="")
+  sentence_str = paste("Logical Coherence | True/False", "\n", "A is true", sep="")
+  pre_update_prob <- (point_data %>% pull(editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- (point_data %>% pull(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'A_TF_case_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[5]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_TF_coherence.pdf", DATA_ID), width = 5.4, height = 3.6, units = "in")
+  
+  # not coherence
+  sentence_str <- (point_data %>% pull(same_s_same_r_sentence_new_modal_obj))[1]
+  sentence_str <- sprintf("'not %s' is true", sentence_str)
+  sentence_str = paste("Logical Coherence | Negation", "\n", sentence_str, sep="")
+  sentence_str = paste("Logical Coherence | Negation", "\n", "not A is true", sep="")
+  pre_update_prob <- 1 - (point_data %>% pull(editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1]
+  post_update_prob <- 1 - (point_data %>% pull(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  plot <- plot_probs(point_data, 'not_A_case_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[6]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_not_coherence.pdf", DATA_ID), width = 5.4, height = 3.6, units = "in")
+  
+  # or coherence
+  sentence_str <- (point_data %>% pull(same_s_same_r_sentence_new_modal_obj))[1]
+  sentence_str <- sprintf("'%s'", sentence_str)
+  sentence_str = paste("Logical Coherence | Disjunction", "\n", sentence_str, " or 'B' is true", sep="")
+  sentence_str = paste("Logical Coherence | Disjunction", "\n", "'A' or 'B' is true", sep="") 
+  # sentence_str = expression(sentence_str ~ " or " ~ italics("B"))
+  prob_B <- (point_data %>% pull(B_TF_case_prob))[1]
+  A_prob_pre_update <- (point_data %>% pull(editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1] 
+  A_prob_post_update <- (point_data %>% pull(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  pre_update_prob <- A_prob_pre_update + prob_B - A_prob_pre_update * prob_B
+  post_update_prob <- A_prob_post_update + prob_B - A_prob_post_update * prob_B
+  plot <- plot_probs(point_data, 'A_or_B_case_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[7]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_pr_coherence.pdf", DATA_ID), width = 5.4, height = 3.6, units = "in")
+  
+  # and coherence
+  sentence_str <- (point_data %>% pull(same_s_same_r_sentence_new_modal_obj))[1]
+  sentence_str <- sprintf("'%s'", sentence_str)
+  sentence_str = paste("Logical Coherence | Conjunction", "\n", sentence_str, " and 'B' is true", sep="")
+  sentence_str = paste("Logical Coherence | Conjunction", "\n", "'A' and 'B' is true", sep="") 
+  # sentence_str = expression(sentence_str ~ " or " ~ italics("B"))
+  prob_B <- (point_data %>% pull(B_TF_case_prob))[1]
+  A_prob_pre_update <- (point_data %>% pull(editing_same_s_same_r_fact_new_modal_obj_pre_update_probs_posterior_prob_marginalized))[1] 
+  A_prob_post_update <- (point_data %>% pull(`editing_same_s_same_r_fact_new_modal_obj_post_update_probs_p=95_posterior_prob_marginalized`))[1]
+  pre_update_prob <- A_prob_pre_update * prob_B
+  post_update_prob <- A_prob_post_update * prob_B
+  plot <- plot_probs(point_data, 'A_and_B_case_prob', pre_update_prob, post_update_prob, sentence_str)
+  print(plot)
+  all_plots[[8]] <- plot
+  # ggsave(plot, filename = sprintf("plots/%s_probs_vs_steps_and_coherence.pdf", DATA_ID), width = 5.4, height = 3.6, units = "in")
+  
+  grid_plot <- grid.arrange(
+    grobs=all_plots, 
+    nrow = 2,
+    # space=0,
+    space=1,
+    top = textGrob("Example of Coherence Metrics Under Model Editing", gp=gpar(fontfamily="Times", fontsize=24), vjust=0.4)
+    # bottom = textGrob("", gp = gpar(fontfamily="Times", fontsize=13), hjust = 0.5, vjust=-.5),
+    # left = textGrob(sprintf("%s Test Accuracy", TEST_ON), rot = 90, gp = gpar(fontfamily = "Times", fontsize=13), vjust = 1.5)
+  )
+    
+  ggsave(grid_plot, filename = sprintf("plots/%s_all_plots.pdf", DATA_ID), width = 16, height=8, units = "in")
+  # ggsave(grid_plot, filename = sprintf("plots/%s_all_plots.pdf", DATA_ID), width = 24, height=8, units = "in")
+
+}
+  
+
+```
+
+
+```{r load training log data to make loss curves}
+
+training_data <- read_csv('training_logs/log_mistral-83m_clm_100000-facts_10-rels_tb-1.0e+09_bs-128_mgtp-0.6_s-10_b-10_c-20_TF-a-o-n_ho-5_he-0_sd0.csv')
+
+```
+
+
+```{r plot loss vs tokens}
+
+loss_data <- training_data %>%
+  select(n_tokens, train_loss, o_given_s_r_loss, eval_loss) %>%
+  pivot_longer(cols=c(train_loss, eval_loss))
+
+(
+plot <- loss_data %>% 
+    ggplot(aes(x=n_tokens, y=value, color=name)) +
+    geom_line(linewidth=.75) + 
+    ylim(c(0,4)) + 
+    labs(x="# Tokens", y="Loss", title="LM Pretraining Loss") +
+    # scale_color_manual(values=cbp2, labels = c("Eval Loss", "Train Loss", name="Pretraining Loss")) +
+    scale_color_manual(values = cbp2, 
+                     labels = c("Eval Loss", "Train Loss"),
+                     name = "Loss") +
+    theme
+)
+ggsave(plot, filename="plots/LM_pretraining_loss.pdf", width=5, height=3)
+
+
+gen_acc_data <- training_data %>%
+  select(n_tokens, eval_acc, A_TF_case_acc, not_A_case_acc, A_and_B_case_acc, A_or_B_case_acc) %>%
+  pivot_longer(cols=c(eval_acc, A_TF_case_acc, not_A_case_acc, A_and_B_case_acc, A_or_B_case_acc))
+(
+plot <- gen_acc_data %>% 
+    mutate(name=factor(name, levels=c("eval_acc", "A_TF_case_acc", 'not_A_case_acc', "A_and_B_case_acc", "A_or_B_case_acc"))) %>% 
+    ggplot(aes(x=n_tokens, y=value, color=name)) +
+    geom_line(linewidth=.6) + 
+    ylim(c(0,1)) + 
+    labs(x="# Tokens", y="Acc", title="Generative Accuracy in Pretraining") +
+    # scale_color_manual(values=cbp2, labels = c("Eval Loss", "Train Loss", name="Pretraining Loss")) +
+    scale_color_manual(values = cbp1, 
+                     labels = c("Atomic Sentences", "TF Sentences", "Not Sentences", "And Sentences", "Or Sentences"),
+                     name = "Sentence Type") +
+    theme
+)
+ggsave(plot, filename="plots/LM_pretraining_acc.pdf", width=5, height=3)
+
+```
+
+
+
+
+
